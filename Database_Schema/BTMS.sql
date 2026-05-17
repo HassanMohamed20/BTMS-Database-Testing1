@@ -1,6 +1,5 @@
 CREATE DATABASE BTMS_db;
 USE BTMS_db;
-
 -- 6.1 Customers
 CREATE TABLE Customers (
     customer_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -40,19 +39,70 @@ CREATE TABLE Transactions (
     FOREIGN KEY (category_id) REFERENCES Transaction_Categories(category_id)
 );
 
+
 -- 6.5 Fees
 CREATE TABLE Fees (
     fee_id INT PRIMARY KEY AUTO_INCREMENT,
     transaction_id INT NOT NULL,
     fee_type ENUM('Transfer Fee','Failed Transaction Fee','Over Limit Fee') NOT NULL,
-    amount DECIMAL(10,2) CHECK(amount > 0),
+    amount DECIMAL(10,2) NOT NULL,
     FOREIGN KEY (transaction_id) REFERENCES Transactions(transaction_id)
 );
+
+DELIMITER $$
+
+CREATE TRIGGER create_fee_after_transaction
+AFTER INSERT ON Transactions
+FOR EACH ROW
+BEGIN
+    DECLARE calculated_fee DECIMAL(10,2);
+
+    -- Only apply fee for Transfer transactions
+    IF NEW.transaction_type = 'Transfer' THEN
+
+        -- Calculate 10%
+        SET calculated_fee = NEW.amount * 0.10;
+
+        -- Apply minimum fee
+        IF calculated_fee < 5 THEN
+            SET calculated_fee = 5;
+        END IF;
+
+        -- Apply maximum fee
+        IF calculated_fee > 200 THEN
+            SET calculated_fee = 200;
+        END IF;
+
+        -- Insert fee automatically
+        INSERT INTO Fees (transaction_id, fee_type, amount)
+        VALUES (
+            NEW.transaction_id,
+            'Transfer Fee',
+            calculated_fee
+        );
+
+    END IF;
+
+    -- Failed transaction fee
+    IF NEW.transaction_status = 'Failed' THEN
+
+        INSERT INTO Fees (transaction_id, fee_type, amount)
+        VALUES (
+            NEW.transaction_id,
+            'Failed Transaction Fee',
+            10
+        );
+
+    END IF;
+
+END$$
+
+DELIMITER ;
 
 -- 6.6 Branches
 CREATE TABLE Branches (
     branch_id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(100) NOT NULL,
+    name  VARCHAR(100) NOT NULL,
     location VARCHAR(100)
 );
 
@@ -63,8 +113,6 @@ CREATE TABLE Employees (
     branch_id INT NOT NULL,
     FOREIGN KEY (branch_id) REFERENCES Branches(branch_id)
 );
-
-
 
 
 USE BTMS_db;
@@ -114,3 +162,13 @@ INSERT INTO Transactions (sender_account, receiver_account, category_id, transac
 -- Scenario: Fee for the transfer transaction_id 2
 INSERT INTO Fees (transaction_id, fee_type, amount) VALUES 
 (2, 'Transfer Fee', 5.50);
+
+
+-- Show data
+SELECT * FROM Customers;
+SELECT * FROM Accounts;
+SELECT * FROM Transaction_Categories;
+SELECT * FROM Transactions;
+SELECT * FROM Fees;
+SELECT * FROM Branches;
+SELECT * FROM Employees;
